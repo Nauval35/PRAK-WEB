@@ -4,7 +4,7 @@
 * **NIM:** [2406035]
 * **Kelas/Prodi:** Teknik Informatika - ITG
 * **Kode MK:** IFRWP5151
-* **Kode :** HIMAKOS 
+* **Komunitas :** HIMAKOS 
 
 ## Catatan Modul 1
 - Instalasi & Verifikasi Tools (VS Code, Node.js, Laragon, Git).
