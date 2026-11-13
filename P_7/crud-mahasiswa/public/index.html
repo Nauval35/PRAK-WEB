@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRUD Mahasiswa</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 1rem;
+      background: #f4f6f8;
+    }
+    h1 { text-align: center; margin-bottom: 1.5rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.5rem; }
+
+    .toolbar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .toolbar-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    input[type="text"],
+    input[type="email"] {
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1rem;
+    }
+    input#searchInput { min-width: 260px; flex: 1; }
+    #counter {
+      font-weight: bold;
+      color: #333;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+    }
+    th { background: #eef2f6; color: #222; }
+    tr:nth-child(even) { background: #fafafa; }
+
+    button {
+      padding: 0.45rem 0.8rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    button.delete { background: #dc3545; color: #fff; }
+    button.delete:hover { background: #b52c3d; }
+    button[type="submit"] { background: #28a745; color: #fff; }
+    button[type="submit"]:hover { background: #218838; }
+
+    form {
+      background: #fff;
+      padding: 1rem;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.75rem;
+      align-items: end;
+    }
+    form button { grid-column: 1 / -1; width: fit-content; justify-self: start; }
+
+    .no-data {
+      text-align: center;
+      padding: 1rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Data Mahasiswa</h1>
+
+  <div class="toolbar">
+    <!-- Kolom pencarian real-time (Fitur 1) -->
+    <div class="toolbar-row">
+      <input type="text" id="searchInput" placeholder="Cari nama atau NIM...">
+      <!-- Indikator counter total mahasiswa (Fitur 3) -->
+      <span id="counter">Total Mahasiswa Terdaftar: 0 Orang</span>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>NIM</th>
+        <th>Nama</th>
+        <th>Jurusan</th>
+        <th>Email</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <h2>Tambah Mahasiswa</h2>
+  <form id="mahasiswaForm">
+    <input type="text" name="nim" placeholder="NIM" required>
+    <input type="text" name="nama" placeholder="Nama" required>
+    <input type="text" name="jurusan" placeholder="Jurusan" required>
+    <input type="email" name="email" placeholder="Email" required>
+    <button type="submit">Simpan</button>
+  </form>
+
+  <script>
+    const API_URL = "/api/mahasiswa";
+    const tableBody = document.getElementById("tableBody");
+    const searchInput = document.getElementById("searchInput");
+    const counterEl = document.getElementById("counter");
+    const form = document.getElementById("mahasiswaForm");
+
+    // Daftar mahasiswa yang dipertahankan di memori (digunakan oleh fitur 1, 2, 3)
+    let listMahasiswa = [];
+
+    // Ambil data mahasiswa dari backend
+    async function fetchMahasiswa() {
+      try {
+        const res = await fetch(API_URL);
+        if (!res.ok) throw new Error("Gagal memuat data");
+        listMahasiswa = await res.json();
+        updateCounter();
+        applyFilter();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // Render tabel ke DOM
+    function renderTable(data) {
+      tableBody.innerHTML = "";
+      if (data.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="no-data">Data mahasiswa tidak ditemukan.</td></tr>';
+        return;
+      }
+      data.forEach((m) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${m.nim}</td>
+          <td>${m.nama}</td>
+          <td>${m.jurusan}</td>
+          <td>${m.email}</td>
+          <td><button class="delete" data-id="${m.id}">Hapus</button></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      // Pasang event listener pada tombol hapus
+      document.querySelectorAll(".delete").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-id");
+          hapusMahasiswa(id);
+        });
+      });
+    }
+
+    // Update counter total mahasiswa (Fitur 3)
+    function updateCounter() {
+      counterEl.textContent = `Total Mahasiswa Terdaftar: ${listMahasiswa.length} Orang`;
+    }
+
+    // ============================================================
+    // FITUR 1: Kolom Pencarian Real-Time (Search Filter di JavaScript)
+    // Event listener 'input' - setiap pengetikan menyaring tabel instan
+    // dengan listMahasiswa.filter(...)
+    // ============================================================
+    function applyFilter() {
+      const keyword = searchInput.value.trim().toLowerCase();
+      const filtered = listMahasiswa.filter(
+        (m) =>
+          m.nim.toLowerCase().includes(keyword) ||
+          m.nama.toLowerCase().includes(keyword)
+      );
+      renderTable(filtered);
+    }
+
+    searchInput.addEventListener("input", applyFilter);
+
+    // ============================================================
+    // FITUR 3: Indikator Counter Total Mahasiswa
+    // Nilai diperbarui setiap kali data berhasil ditambah atau dihapus
+    // ============================================================
+
+    // Tambah data mahasiswa
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(form);
+      const obj = Object.fromEntries(formData.entries());
+
+      // ============================================================
+      // FITUR 2: Validasi Pencegahan NIM Duplikat di Frontend
+      // Gunakan .some() untuk cek apakah NIM sudah ada di listMahasiswa.
+      // Jika sudah ada, batalkan submit dan tampilkan alert.
+      // ============================================================
+      if (listMahasiswa.some((m) => m.nim === obj.nim)) {
+        alert("NIM sudah terdaftar!");
+        return;
+      }
+
+      // Kirim data ke backend via fetch()
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(obj),
+        });
+        if (!res.ok) throw new Error("Gagal menambahkan data");
+        const result = await res.json();
+
+        if (result.success) {
+          form.reset();
+          fetchMahasiswa(); // perbarui daftar & counter setelah berhasil ditambah
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    // Hapus data mahasiswa
+    async function hapusMahasiswa(id) {
+      if (!confirm("Yakin ingin menghapus data ini?")) return;
+      try {
+        const res = await fetch(`${API_URL}/${id}`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error("Gagal menghapus data");
+        const result = await res.json();
+
+        if (result.success) {
+          fetchMahasiswa(); // perbarui daftar & counter setelah berhasil dihapus
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    // Inisialisasi saat halaman dimuat
+    fetchMahasiswa();
+  </script>
+</body>
+</html>
